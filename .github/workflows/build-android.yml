@@ -31,9 +31,16 @@ jobs:
       - name: Download export templates
         run: |
           wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz
-          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}
           unzip -q Godot_v${GODOT_VERSION}_export_templates.tpz -d /tmp/templates
-          mv /tmp/templates/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}/
+          # Godot's release *tag* uses a dash (4.3-stable), but the engine looks up
+          # its local export-templates folder using a dot before the status word
+          # (4.3.stable). Installing under both names avoids "no export template
+          # found" failures regardless of which one this Godot build expects.
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}
+          cp -r /tmp/templates/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}/
+          DOTTED_VERSION=$(echo "${GODOT_VERSION}" | sed 's/-/./')
+          mkdir -p ~/.local/share/godot/export_templates/${DOTTED_VERSION}
+          cp -r /tmp/templates/templates/* ~/.local/share/godot/export_templates/${DOTTED_VERSION}/
 
       - name: Generate debug keystore
         run: |
@@ -42,11 +49,9 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
 
       - name: Export Android APK
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: |
           mkdir -p build
-          ./godot --headless --export-debug "Android" build/gasstation.apk
+          ./godot --headless --verbose --export-debug "Android" build/gasstation.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
