@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.3-stable"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download Godot
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Download export templates
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}_export_templates.tpz -d /tmp/templates
+          # Godot's release *tag* uses a dash (4.3-stable), but the engine looks up
+          # its local export-templates folder using a dot before the status word
+          # (4.3.stable). Installing under both names avoids "no export template
+          # found" failures regardless of which one this Godot build expects.
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}
+          cp -r /tmp/templates/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}/
+          DOTTED_VERSION=$(echo "${GODOT_VERSION}" | sed 's/-/./')
+          mkdir -p ~/.local/share/godot/export_templates/${DOTTED_VERSION}
+          cp -r /tmp/templates/templates/* ~/.local/share/godot/export_templates/${DOTTED_VERSION}/
+
+      - name: Generate debug keystore
+        run: |
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey \
+            -keypass android -keystore debug.keystore -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+
+      - name: Export Android APK
+        run: |
+          mkdir -p build
+          ./godot --headless --verbose --export-debug "Android" build/gasstation.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gas-station-simulator-apk
+          path: build/gasstation.apk
